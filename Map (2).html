@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fare Matrix</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+body{
+font-family: Arial, sans-serif;
+margin:0;
+background:#f4f6f9;
+}
+
+header{
+background:#0078A8;
+color:white;
+padding:15px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+nav a{
+color:white;
+margin:0 10px;
+text-decoration:none;
+}
+
+nav button{
+background:white;
+color:#0078A8;
+border:none;
+padding:6px 12px;
+margin-left:10px;
+border-radius:4px;
+cursor:pointer;
+}
+
+main{
+display:flex;
+padding:20px;
+}
+
+#map-section{
+flex:2;
+margin-right:20px;
+}
+
+#map{
+height:600px;
+border-radius:8px;
+border:2px solid #ccc;
+}
+
+#fare-section{
+flex:1;
+background:white;
+padding:20px;
+border-radius:8px;
+box-shadow:0 2px 6px rgba(0,0,0,0.1);
+}
+
+label{
+display:block;
+margin-top:10px;
+font-weight:bold;
+}
+
+select{
+width:100%;
+padding:8px;
+margin-top:5px;
+margin-bottom:10px;
+border:1px solid #ccc;
+border-radius:4px;
+}
+
+.fare-options button{
+margin:5px;
+padding:8px 12px;
+border:none;
+border-radius:4px;
+cursor:pointer;
+}
+
+.fare-options button:first-child{
+background:#0078A8;
+color:white;
+}
+
+.fare-options button:last-child{
+background:#28a745;
+color:white;
+}
+
+button:hover{
+opacity:0.85;
+}
+
+.fare-box{
+margin-top:15px;
+font-size:20px;
+font-weight:bold;
+color:#0078A8;
+}
+
+.info{
+margin-top:10px;
+font-size:14px;
+}
+
+footer{
+text-align:center;
+padding:10px;
+background:#eee;
+margin-top:20px;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>Fare Matrix</h1>
+<nav>
+<a href="#">Home</a>
+<a href="#">Fare Matrix</a>
+<a href="#">Schedule</a>
+<a href="#">Help</a>
+<button>Book Now</button>
+<button>Create Account</button>
+</nav>
+</header>
+
+<main>
+
+<section id="map-section">
+<div id="map"></div>
+</section>
+
+<section id="fare-section">
+
+<h2>Fare Calculator</h2>
+
+<label>Pick-up Location</label>
+<select id="pickup"></select>
+
+<label>Drop-off Location</label>
+<select id="destination"></select>
+
+<div class="fare-options">
+<button onclick="setDiscount(0)">Regular Fare</button>
+<button onclick="setDiscount(0.20)">Discounted Fare</button>
+</div>
+
+<div class="fare-box">
+Fare: <span id="fare">₱0</span>
+</div>
+
+<div class="info">
+Distance: <span id="distance">0 km</span>
+</div>
+
+</section>
+
+</main>
+
+<footer>
+Student Name | Grade & Section ©2026
+</footer>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+// fare settings
+var baseFare=50
+var perKMrate=12
+var discountRate=0
+
+// MAP
+var map=L.map('map').setView([14.6200,121.0300],12)
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{attribution:'© OpenStreetMap'}
+).addTo(map)
+
+// STATIONS
+
+var line1=[
+{name:"Roosevelt",coords:[14.6540,121.0270]},
+{name:"Balintawak",coords:[14.6576,121.0193]},
+{name:"Monumento",coords:[14.6549,120.9822]},
+{name:"Doroteo Jose",coords:[14.6090,120.9820]},
+{name:"EDSA",coords:[14.5366,121.0014]},
+{name:"Baclaran",coords:[14.5340,120.9980]}
+]
+
+var line2=[
+{name:"Recto",coords:[14.6037,120.9837]},
+{name:"Legarda",coords:[14.6005,120.9922]},
+{name:"Pureza",coords:[14.5994,121.0042]},
+{name:"V Mapa",coords:[14.5973,121.0161]},
+{name:"Cubao",coords:[14.6194,121.0525]},
+{name:"Santolan",coords:[14.6211,121.0848]}
+]
+
+var line3=[
+{name:"North Avenue",coords:[14.6538,121.0323]},
+{name:"Quezon Avenue",coords:[14.6462,121.0370]},
+{name:"Ortigas",coords:[14.5869,121.0606]},
+{name:"Ayala",coords:[14.5547,121.0244]},
+{name:"Taft Avenue",coords:[14.5370,121.0010]}
+]
+
+// combine stations
+
+var allStations=[
+...line1.map((s,i)=>({line:"Line1",index:i,...s})),
+...line2.map((s,i)=>({line:"Line2",index:i,...s})),
+...line3.map((s,i)=>({line:"Line3",index:i,...s}))
+]
+
+// populate dropdowns
+
+function populate(id){
+var select=document.getElementById(id)
+
+allStations.forEach(st=>{
+var opt=document.createElement("option")
+opt.value=JSON.stringify({line:st.line,index:st.index})
+opt.text=st.line+" - "+st.name
+select.add(opt)
+})
+}
+
+populate("pickup")
+populate("destination")
+
+// draw lines
+
+function drawLine(stations,color){
+
+L.polyline(
+stations.map(s=>s.coords),
+{color:color,weight:4}
+).addTo(map)
+
+stations.forEach(st=>{
+L.circleMarker(st.coords,{
+radius:7,
+color:color,
+fillColor:color,
+fillOpacity:0.8
+})
+.bindTooltip(st.name,{permanent:true})
+.addTo(map)
+})
+
+}
+
+drawLine(line1,"green")
+drawLine(line2,"red")
+drawLine(line3,"blue")
+
+// distance formula
+
+function getDistance(a,b){
+
+var R=6371
+
+var lat1=a[0]*Math.PI/180
+var lat2=b[0]*Math.PI/180
+
+var dLat=(b[0]-a[0])*Math.PI/180
+var dLon=(b[1]-a[1])*Math.PI/180
+
+var x=
+Math.sin(dLat/2)*Math.sin(dLat/2)+
+Math.cos(lat1)*Math.cos(lat2)*
+Math.sin(dLon/2)*Math.sin(dLon/2)
+
+var d=2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))
+
+return R*d
+}
+
+var routeLine=null
+
+function setDiscount(rate){
+discountRate=rate
+calculateFare()
+}
+
+function calculateFare(){
+
+var p=document.getElementById("pickup").value
+var d=document.getElementById("destination").value
+
+if(!p||!d)return
+
+var pickup=JSON.parse(p)
+var dest=JSON.parse(d)
+
+var line
+
+if(pickup.line==="Line1")line=line1
+if(pickup.line==="Line2")line=line2
+if(pickup.line==="Line3")line=line3
+
+if(pickup.line!==dest.line){
+document.getElementById("fare").innerText="Transfer needed"
+return
+}
+
+var start=Math.min(pickup.index,dest.index)
+var end=Math.max(pickup.index,dest.index)
+
+var path=line.slice(start,end+1)
+
+var distance=0
+
+for(let i=0;i<path.length-1;i++){
+distance+=getDistance(path[i].coords,path[i+1].coords)
+}
+
+distance=distance.toFixed(2)
+
+document.getElementById("distance").innerText=distance+" km"
+
+var fare=baseFare+(distance*perKMrate)
+
+fare=Math.round(fare-(fare*discountRate))
+
+document.getElementById("fare").innerText="₱"+fare
+
+if(routeLine)map.removeLayer(routeLine)
+
+routeLine=L.polyline(
+path.map(s=>s.coords),
+{color:"orange",weight:6}
+).addTo(map)
+
+}
+
+document.getElementById("pickup").addEventListener("change",calculateFare)
+document.getElementById("destination").addEventListener("change",calculateFare)
+
+</script>
+
+</body>
+</html>
